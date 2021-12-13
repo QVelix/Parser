@@ -1,6 +1,7 @@
 <?php
 require 'vendor/autoload.php';
 use GuzzleHttp\Client;
+use GuzzleHttp\TransferStats;
 use Symfony\Component\DomCrawler\Crawler;
 
 //Создаём константу такскома, потому что будем часто использовать
@@ -12,8 +13,6 @@ chdir(__DIR__.'/logs');
 if(!file_exists('cronIteration.txt')) file_put_contents(__DIR__.'/logs/cronIteration.txt', 0);
 $iteration = (int)file_get_contents('cronIteration.txt');
 echo $iteration;
-$citiesCount = count(json_decode(file_get_contents(__DIR__.'/assets/cities.json'), JSON_OBJECT_AS_ARRAY));
-if($iteration>$citiesCount) $iteration = 0;
 //Проверяем на наличие папки assets, если её нет - создаём
 if(!file_exists(__DIR__.'/assets')) mkdir(__DIR__.'/assets', 0777);
 chdir(__DIR__.'/assets');
@@ -21,12 +20,17 @@ chdir(__DIR__.'/assets');
 if(!file_exists('links.json')||(string)date('Y-m')>(string)date('Y-m',filemtime('links.json'))){
     ParseClasses();
 }
+
 //Проверяем файл "города" на существование и дату создания
 if(!file_exists('cities.json')||(string)date('Y-m')>(string)date('Y-m',filemtime('cities.json'))){
     //Парсим города и их id
     $data = citiesParser();
     //Сохраняем города
     file_put_contents('cities.json', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+    $citiesCount = count($data);
+    if($iteration>$citiesCount) $iteration = 0;
+
     if(!file_exists('./cities')) mkdir('./cities');
     chdir('./cities');
     //Проходимся по городам
@@ -56,6 +60,10 @@ if(!file_exists('cities.json')||(string)date('Y-m')>(string)date('Y-m',filemtime
 }
 else{
     $data = json_decode(file_get_contents('cities.json'), JSON_OBJECT_AS_ARRAY);
+
+    $citiesCount = count($data);
+    if($iteration>$citiesCount) $iteration = 0;
+    
     if(!file_exists('./cities')) mkdir('./cities');
     chdir('./cities');
     foreach($data as $k => $city){
@@ -209,10 +217,10 @@ function Parse($cityId, $links){
         switch($k){
             case 0:
                 //Запрос на сервер с сылкой на определённую вкладку
-                //$response = $client->request('GET', $element['link'].$action.'13');
-                //$response = $client->request('GET', $element['link'].$action.$cityId);
-                $response = $client->request('GET', $element['link'], ['action'=>'setRegion', 'id' => $cityId]);
-                //$response = $client->request('GET', BASE_URI, ['path' => $element['link'].'?action=setRegion&id='.$cityId]);
+                $response = $client->request('GET', $element['link'], ['action'=>'setRegion', 'id' => $cityId, 'on_stats' => function (TransferStats $stats) {echo $stats->getEffectiveUri();}]);
+                //$response = $client->request('GET', ['path'=>$element['link'].'?action=setRegion&id='.$cityId]);
+                //$response = $client->head($element['link'].'?action=>setRegion&id='.$cityId);
+                //$response = $client->request('GET', $element['link'].'?action=setRegion&id='.$cityId);
                 //echo $element['link'].'. '.$response->getStatusCode().'<br/>';
                 $body = $response->getBody();
                 //Берём часть страницы со скриптом
