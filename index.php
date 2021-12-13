@@ -7,7 +7,13 @@ use Symfony\Component\DomCrawler\Crawler;
 define('BASE_URI', 'https://taxcom.ru');
 //Увеличиваем лимит ожидания выполнения скрипта, чтобы не было ошибок
 set_time_limit(5600);
-
+if(!file_exists('./logs')) mkdir('./logs');
+chdir(__DIR__.'/logs');
+if(!file_exists('cronIteration.txt')) file_put_contents(__DIR__.'/logs/cronIteration.txt', 0);
+$iteration = (int)file_get_contents('cronIteration.txt');
+echo $iteration;
+$citiesCount = count(json_decode(file_get_contents(__DIR__.'/assets/cities.json'), JSON_OBJECT_AS_ARRAY));
+if($iteration>$citiesCount) $iteration = 0;
 //Проверяем на наличие папки assets, если её нет - создаём
 if(!file_exists(__DIR__.'/assets')) mkdir(__DIR__.'/assets', 0777);
 chdir(__DIR__.'/assets');
@@ -24,26 +30,27 @@ if(!file_exists('cities.json')||(string)date('Y-m')>(string)date('Y-m',filemtime
     if(!file_exists('./cities')) mkdir('./cities');
     chdir('./cities');
     //Проходимся по городам
-    foreach($data as $city){
-        //Проверяем на существование папок с названиями городов
-        if(!file_exists('./'.$city['path'])) mkdir('./'.$city['path'], 0777); 
-        chdir('./'.$city['path']);
-        //Собираем массив файлов в папке города
-        $files = glob('./*');
-        if(empty($files)){
-            //Парсим, если нет элементов
-            Parse($city['id'],json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
-        }else{
-            //Проверяем каждый элемент на "устаревание" и парсим 3 файла, если хоть один устарел
-            foreach($files as $filename){
-                if((string)date('Y-m')>(string)date('Y-m',filemtime($filename))){
-                    //Debug(json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
-                    Parse($city['id'], json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
+    foreach($data as $k => $city){
+        if($k == $iteration){
+            //Проверяем на существование папок с названиями городов
+            if(!file_exists('./'.$city['path'])) mkdir('./'.$city['path'], 0777); 
+            chdir('./'.$city['path']);
+            //Собираем массив файлов в папке города
+            $files = glob('./*');
+            if(empty($files)){
+                //Парсим, если нет элементов
+                Parse($city['id'],json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
+            }else{
+                //Проверяем каждый элемент на "устаревание" и парсим 3 файла, если хоть один устарел
+                foreach($files as $filename){
+                    if((string)date('Y-m')>(string)date('Y-m',filemtime($filename))){
+                        //Debug(json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
+                        Parse($city['id'], json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
+                    }
                 }
             }
+            chdir(__DIR__.'/assets/cities');
         }
-        chdir(__DIR__.'/assets/cities');
-        sleep(20);
     }
     chdir(__DIR__.'/assets');
 }
@@ -51,27 +58,29 @@ else{
     $data = json_decode(file_get_contents('cities.json'), JSON_OBJECT_AS_ARRAY);
     if(!file_exists('./cities')) mkdir('./cities');
     chdir('./cities');
-    foreach($data as $city){
-        if(!file_exists('./'.$city['path'])) mkdir('./'.$city['path'], 0777);
-        chdir('./'.$city['path']);
-        $files = glob('./*');
-        if(empty($files)){
-            //Debug(json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
-            Parse($city['id'],json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
-        }else{
-            foreach($files as $filename){
-                if((string)date('Y-m')>(string)date('Y-m',filemtime($filename))){
-                    //Debug(json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
-                    Parse($city['id'], json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
+    foreach($data as $k => $city){
+        if($k == $iteration){
+            if(!file_exists('./'.$city['path'])) mkdir('./'.$city['path'], 0777);
+            chdir('./'.$city['path']);
+            $files = glob('./*');
+            if(empty($files)){
+                //Debug(json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
+                Parse($city['id'],json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
+            }else{
+                foreach($files as $filename){
+                    if((string)date('Y-m')>(string)date('Y-m',filemtime($filename))){
+                        //Debug(json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
+                        Parse($city['id'], json_decode(file_get_contents(__DIR__.'/assets/links.json'), JSON_OBJECT_AS_ARRAY));
+                    }
                 }
             }
+            chdir(__DIR__.'/assets/cities');
         }
-        chdir(__DIR__.'/assets/cities');
-        sleep(20);
     }
     chdir(__DIR__.'/assets');
 }
 chdir(__DIR__);
+file_put_contents(__DIR__.'/logs/cronIteration.txt', ++$iteration);
 
 /*Проверяем есть ли файл продуктов и как давно сохранён
  if(!file_exists('products.json') || (string)date('Y-m')>(string)date('Y-m',filemtime('products.json'))){
@@ -194,15 +203,16 @@ function citiesParser(){
 }
 
 function Parse($cityId, $links){
-    if($cityId == 12){
-    $action = '?action=setRegion&id=';
+    //$action = '?action=setRegion&id=';
     $client = new Client(['base_uri' => BASE_URI]);
     foreach($links as $k=>$element){
         switch($k){
             case 0:
                 //Запрос на сервер с сылкой на определённую вкладку
-                $response = $client->request('GET', $element['link'].$action.'13');
-                //$response = $client->request('GET', $element['link'], ['action'=>'setRegion', 'id' => $cityId]);
+                //$response = $client->request('GET', $element['link'].$action.'13');
+                //$response = $client->request('GET', $element['link'].$action.$cityId);
+                $response = $client->request('GET', $element['link'], ['action'=>'setRegion', 'id' => $cityId]);
+                //$response = $client->request('GET', BASE_URI, ['path' => $element['link'].'?action=setRegion&id='.$cityId]);
                 //echo $element['link'].'. '.$response->getStatusCode().'<br/>';
                 $body = $response->getBody();
                 //Берём часть страницы со скриптом
@@ -213,14 +223,15 @@ function Parse($cityId, $links){
                 //Выделяем json показываемых кнопок (проделываем аналогичное, как ранее с продуктами, но в конце убираем запятую и табуляцию)
                 $buttons = substr(str_replace("'",'"',str_replace('filter: ','',strstr(strstr($script, 'filter:'),'showPeriods:', true))),0,-14);
                 file_put_contents('accouting_buttons.json', $buttons);
-                $citiesScript = strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true);
-                echo $citiesScript;
+                $citiesScript = StringCleaner(trim(str_replace('currentRegion:','',(strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'),'});',true))), "\t\n\r\0\x0B"));
+                $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
+                file_put_contents(__DIR__.'/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), FILE_APPEND);
                 break;
             case 1:
                 //Создаём массив, в котором будем хранить данные
                 $data = [];
                 //Отправляем запрос
-                $response = $client->request('POST', $element['link'].$action.$cityId);
+                $response = $client->request('GET', $element['link'], ['action'=>'setRegion', 'id' => $cityId]);
                 //echo $element['link'].'. '.$response->getStatusCode().'<br/>';
                 $body = $response->getBody()->getContents();
                 $crawler = new Crawler((string)$body);
@@ -234,13 +245,16 @@ function Parse($cityId, $links){
                     $data['link_fast'] = (string)$node->filter('.tariffUc__switch > input')->eq(1)->attr('data-link');
                     return $data;
                 });
+                $citiesScript = StringCleaner(trim(str_replace('currentRegion:','',(strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'),'});',true))), "\t\n\r\0\x0B"));
+                $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
+                file_put_contents(__DIR__.'/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), FILE_APPEND);
                 //Сохраняем
                 file_put_contents('electronic_signatures.json',json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
                 break;
             default:
                 break;
         }
-    }}
+    }
 }
 
 function ParseClasses(){
