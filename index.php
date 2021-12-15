@@ -122,56 +122,72 @@ function citiesParser(){
 }
 
 function Parse($cityId, $links){
-    //$action = '?action=setRegion&id=';
-    $client = new Client(['cookies'=>true]);
-    foreach($links as $k=>$element){
-        switch($k){
-            case 0:
-                //Запрос на сервер с сылкой на определённую вкладку
-                //$response = $client->request('GET', BASE_URI.$element['link'], ['action'=>'setRegion', 'id' => $cityId, 'on_stats' => function (TransferStats $stats) {echo $stats->getEffectiveUri();}]);
-                $cookie = CookieJar::fromArray(['REGION_ID'=>$cityId, 'B_TAX_REGION_ID'=>$cityId], BASE_URI);
-                $response = $client->request('GET', BASE_URI.$element['link'], ['cookies'=>$cookie]);
-                $body = $response->getBody();
-                //Берём часть страницы со скриптом
-                $script = strstr(strstr((string)$body, 'var masterOtchetnost = new MasterOtchetnost({'),'</script>',true);
-                //Выделяем json продуктов (убераем лишнии знаки и меняем ' на ", чтобы работало всё как json)
-                $content = str_replace("'", '"',str_replace('tariffs: ','',strstr(strstr($script, 'tariffs: '),'}}},', true).'}}}'));
-                file_put_contents($element['file_name'], $content);
-                //Выделяем json показываемых кнопок (проделываем аналогичное, как ранее с продуктами, но в конце убираем запятую и табуляцию)
-                $buttons = substr(str_replace("'",'"',str_replace('filter: ','',strstr(strstr($script, 'filter:'),'showPeriods:', true))),0,-14);
-                file_put_contents('accouting_buttons.json', $buttons);
-                $citiesScript = StringCleaner(trim(str_replace('currentRegion:','',(strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'),'});',true))), "\t\n\r\0\x0B"));
-                $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
-                file_put_contents(__DIR__.'/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE).'\n', FILE_APPEND);
-                break;
-            case 1:
-                //Создаём массив, в котором будем хранить данные
-                $data = [];
-                //Отправляем запрос
-                $response = $client->request('GET', BASE_URI.$element['link'], ['action'=>'setRegion', 'id' => $cityId]);
-                //echo $element['link'].'. '.$response->getStatusCode().'<br/>';
-                $body = $response->getBody()->getContents();
-                $crawler = new Crawler((string)$body);
-                //Выбираем необходимую часть страницы и сохраняем необходимые данные в массив
-                $data = $crawler->filter('div.tariffsUc > .container > .tariffsUcTabContent > .row > .tariffsUcTabContent__tariff')->each(function(Crawler $node, $i){
-                    $data['name'] = (string)StringCleaner($node->filter('.tariffUc__title')->text('Default text content', false));
-                    $data['description'] = (string)StringCleaner($node->filter('.tariffUc__desc')->text('Default text content', false));
-                    $data['price'] = (int)$node->filter('.tariffUc__switch > input')->attr('data-price');
-                    $data['fast_price'] = (int)$node->filter('.tariffUc__switch > input')->eq(1)->attr('data-price');
-                    $data['link'] = (string)$node->filter('.tariffUc__switch > input')->attr('data-link');
-                    $data['link_fast'] = (string)$node->filter('.tariffUc__switch > input')->eq(1)->attr('data-link');
-                    return $data;
-                });
-                $citiesScript = StringCleaner(trim(str_replace('currentRegion:','',(strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'),'});',true))), "\t\n\r\0\x0B"));
-                $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
-                file_put_contents(__DIR__.'/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE).'\n', FILE_APPEND);
-                //Сохраняем
-                file_put_contents('electronic_signatures.json',json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-                break;
-            default:
-                break;
+    try{
+        //$action = '?action=setRegion&id=';
+        $client = new Client(['cookies' => true]);
+        foreach ($links as $k => $element) {
+            switch ($k) {
+                case 0:
+                    try {
+                        //Запрос на сервер с сылкой на определённую вкладку
+                        //$response = $client->request('GET', BASE_URI.$element['link'], ['action'=>'setRegion', 'id' => $cityId, 'on_stats' => function (TransferStats $stats) {echo $stats->getEffectiveUri();}]);
+                        $cookie = CookieJar::fromArray(['REGION_ID' => $cityId, 'B_TAX_REGION_ID' => $cityId], BASE_URI);
+                        $response = $client->request('GET', BASE_URI . $element['link'], ['cookies' => $cookie]);
+                        if ($response->getStatusCode() == 200) {
+                            $body = $response->getBody();
+                            //Берём часть страницы со скриптом
+                            $script = strstr(strstr((string)$body, 'var masterOtchetnost = new MasterOtchetnost({'), '</script>', true);
+                            //Выделяем json продуктов (убераем лишнии знаки и меняем ' на ", чтобы работало всё как json)
+                            $content = str_replace("'", '"', str_replace('tariffs: ', '', strstr(strstr($script, 'tariffs: '), '}}},', true) . '}}}'));
+                            file_put_contents($element['file_name'], $content);
+                            //Выделяем json показываемых кнопок (проделываем аналогичное, как ранее с продуктами, но в конце убираем запятую и табуляцию)
+                            $buttons = substr(str_replace("'", '"', str_replace('filter: ', '', strstr(strstr($script, 'filter:'), 'showPeriods:', true))), 0, -14);
+                            file_put_contents('accouting_buttons.json', $buttons);
+                            $citiesScript = StringCleaner(trim(str_replace('currentRegion:', '', (strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'), '});', true))), "\t\n\r\0\x0B"));
+                            $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
+                            file_put_contents(__DIR__ . '/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '\n', FILE_APPEND);
+                        } else {
+                            file_put_contents(__DIR__ . '/logs/errors.log', 'Нет соединения, idГорода = ' . $cityId . '\n', FILE_APPEND);
+                            $GLOBALS["iteration"] = $GLOBALS["iteration"] - 1;
+                        }
+                    } catch (Exception $e) {
+                        file_put_contents(__DIR__ . '/logs/errors.log', $e . '\n', FILE_APPEND);
+                    }
+                    break;
+                case 1:
+                    try{
+                    //Создаём массив, в котором будем хранить данные
+                    $data = [];
+                    //Отправляем запрос
+                    $response = $client->request('GET', BASE_URI . $element['link'], ['action' => 'setRegion', 'id' => $cityId]);
+                    if($response->getStatusCode()==200){
+                    //echo $element['link'].'. '.$response->getStatusCode().'<br/>';
+                    $body = $response->getBody()->getContents();
+                    $crawler = new Crawler((string)$body);
+                    //Выбираем необходимую часть страницы и сохраняем необходимые данные в массив
+                    $data = $crawler->filter('div.tariffsUc > .container > .tariffsUcTabContent > .row > .tariffsUcTabContent__tariff')->each(function (Crawler $node, $i) {
+                        $data['name'] = (string)StringCleaner($node->filter('.tariffUc__title')->text('Default text content', false));
+                        $data['description'] = (string)StringCleaner($node->filter('.tariffUc__desc')->text('Default text content', false));
+                        $data['price'] = (int)$node->filter('.tariffUc__switch > input')->attr('data-price');
+                        $data['fast_price'] = (int)$node->filter('.tariffUc__switch > input')->eq(1)->attr('data-price');
+                        $data['link'] = (string)$node->filter('.tariffUc__switch > input')->attr('data-link');
+                        $data['link_fast'] = (string)$node->filter('.tariffUc__switch > input')->eq(1)->attr('data-link');
+                        return $data;
+                    });
+                    $citiesScript = StringCleaner(trim(str_replace('currentRegion:', '', (strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'), '});', true))), "\t\n\r\0\x0B"));
+                    $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
+                    file_put_contents(__DIR__ . '/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '\n', FILE_APPEND);
+                    //Сохраняем
+                    file_put_contents('electronic_signatures.json', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+                }else{file_put_contents(__DIR__ . '/logs/errors.log', 'Нет соединения, idГорода = ' . $cityId . '\n', FILE_APPEND);
+                    $GLOBALS["iteration"] = $GLOBALS["iteration"] - 1;}
+                }catch(Exception $e){file_put_contents(__DIR__.'/logs/errors.log', $e.'\n', FILE_APPEND);}
+                    break;
+                default:
+                    break;
+            }
         }
-    }
+    }catch(Exception $e){file_put_contents(__DIR__.'logs/errors.log',$e.'\n', FILE_APPEND);}
 }
 
 function ParseClasses(){
@@ -261,4 +277,3 @@ function Debug($data){
     print_r($data);
     echo '</pre>';
 }
-?>
