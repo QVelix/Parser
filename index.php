@@ -41,6 +41,7 @@ if (date('N') < 6 || date('W')) {
         if (!file_exists('cities.json') || (string)date('Y-m') > (string)date('Y-m', filemtime('cities.json'))) {
             //Парсим города и их id
             $data = citiesParser();
+            if ($data == false) break;
             //Сохраняем города
             file_put_contents('cities.json', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
@@ -145,10 +146,16 @@ function citiesParser()
             });
             return $cities[0];
         } else {
+            $e = array('iteration' => $GLOBALS["iteration"], 'errorCode' => 3, 'error' => 'Нет соединиения с сайтом');
+            file_put_contents(__DIR__ . '/logs/errors.log', json_encode($e, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
+            $GLOBALS["iteration"] -= 1;
+            return false;
         }
     } catch (Exception $e) {
         $error = array('iteration' => $GLOBALS["iteration"], 'errorCode' => 1, 'error' => $e);
         file_put_contents(__DIR__ . '/logs/errors.log', json_encode($error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
+        $GLOBALS["iteration"] -= 1;
+        return false;
     }
 }
 
@@ -280,10 +287,12 @@ function ParseClasses()
         } else {
             $e = array('iteration' => $GLOBALS["iteration"], 'errorCode' => 3, 'error' => 'Нет соединиения с сайтом');
             file_put_contents(__DIR__ . '/logs/errors.log', json_encode($e, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
+            $GLOBALS["iteration"] -= 1;
         }
     } catch (Exception $e) {
         $error = array('iteration' => $GLOBALS["iteration"], 'errorCode' => 3, 'error' => $e);
         file_put_contents(__DIR__ . '/logs/errors.log', json_encode($error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
+        $GLOBALS["iteration"] -= 1;
     }
 }
 
