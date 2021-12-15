@@ -13,7 +13,13 @@ chdir(__DIR__.'/logs');
 if(!file_exists('cronIteration.txt')) file_put_contents(__DIR__.'/logs/cronIteration.txt', 0);
 $iteration = (int)file_get_contents('cronIteration.txt');
 echo $iteration;
-
+if(file_exists(__DIR__.'/logs/errors.log')){
+    $err = json_decode(file_get_contents(__DIR__.'/logs/errors.log'), JSON_OBJECT_AS_ARRAY);
+    $err = end($err);
+    if($err['iteration']==$iteration&&date('H', file(__DIR__.'/logs/errors.log'))>=date('H')){
+        sleep(3600);
+    }
+}
 //Проверяется дата последней модификации файла cronIteration (если больше недели), если понадобится
 //if (date('N')<6 || date('W')>date('W', filemtime(__DIR__.'/logs/cronIteration.txt'))&&date('N')<6) {
 //Проверяется день недели (не суббота и не воскресенье)
@@ -145,13 +151,16 @@ function Parse($cityId, $links){
                             file_put_contents('accouting_buttons.json', $buttons);
                             $citiesScript = StringCleaner(trim(str_replace('currentRegion:', '', (strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'), '});', true))), "\t\n\r\0\x0B"));
                             $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
-                            file_put_contents(__DIR__ . '/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '\n', FILE_APPEND);
+                            file_put_contents(__DIR__ . '/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',\n', FILE_APPEND);
                         } else {
-                            file_put_contents(__DIR__ . '/logs/errors.log', 'Нет соединения, idГорода = ' . $cityId . '\n', FILE_APPEND);
-                            $GLOBALS["iteration"] = $GLOBALS["iteration"] - 1;
+                            $e = array('iteration' => $GLOBALS["iteration"], 'cityId' => $cityId, 'error' => 'Нет соединиения с сайтом');
+                            file_put_contents(__DIR__ . '/logs/errors.log', json_encode($e, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '\n', FILE_APPEND);
+                            $GLOBALS["iteration"] -=1;
                         }
                     } catch (Exception $e) {
-                        file_put_contents(__DIR__ . '/logs/errors.log', $e . '\n', FILE_APPEND);
+                        $error = array('iteration' => $GLOBALS["iteration"], 'cityId' => $cityId, 'error' => $e);
+                        file_put_contents(__DIR__ . '/logs/errors.log', json_encode($error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '\n', FILE_APPEND);
+                        $GLOBALS["iteration"] -=1;
                     }
                     break;
                 case 1:
@@ -176,12 +185,19 @@ function Parse($cityId, $links){
                     });
                     $citiesScript = StringCleaner(trim(str_replace('currentRegion:', '', (strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'), '});', true))), "\t\n\r\0\x0B"));
                     $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
-                    file_put_contents(__DIR__ . '/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '\n', FILE_APPEND);
+                    file_put_contents(__DIR__ . '/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',\n', FILE_APPEND);
                     //Сохраняем
                     file_put_contents('electronic_signatures.json', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-                }else{file_put_contents(__DIR__ . '/logs/errors.log', 'Нет соединения, idГорода = ' . $cityId . '\n', FILE_APPEND);
-                    $GLOBALS["iteration"] = $GLOBALS["iteration"] - 1;}
-                }catch(Exception $e){file_put_contents(__DIR__.'/logs/errors.log', $e.'\n', FILE_APPEND);}
+                        } else {
+                            $e = array('iteration' => $GLOBALS["iteration"], 'cityId' => $cityId, 'error' => 'Нет соединиения с сайтом');
+                            file_put_contents(__DIR__ . '/logs/errors.log', json_encode($e, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '\n', FILE_APPEND);
+                            $GLOBALS["iteration"] -=1;
+                        }
+                    } catch (Exception $e) {
+                        $error = array('iteration' => $GLOBALS["iteration"], 'cityId' => $cityId, 'error' => $e);
+                        file_put_contents(__DIR__ . '/logs/errors.log', json_encode($error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '\n', FILE_APPEND);
+                        $GLOBALS["iteration"] -=1;
+                    }
                     break;
                 default:
                     break;
