@@ -26,7 +26,7 @@ if (file_exists(__DIR__ . '/logs/errors.log')) {
 //if (date('N')<6 || date('W')>date('W', filemtime(__DIR__.'/logs/cronIteration.txt'))&&date('N')<6) {
 
 //Проверяется день недели (не суббота и не воскресенье)
-if (date('N') < 6 || date('W')) {
+if (date('N') < 6) {
     //Проверяется рабочее время парсера (с 13:00 до 16:00)
     if (date('H') >= 13 && date('H') <= 16) {
         //Проверяем на наличие папки assets, если её нет - создаём
@@ -41,7 +41,7 @@ if (date('N') < 6 || date('W')) {
         if (!file_exists('cities.json') || (string)date('Y-m') > (string)date('Y-m', filemtime('cities.json'))) {
             //Парсим города и их id
             $data = citiesParser();
-            if ($data == false) break;
+            if ($data == false) return;
             //Сохраняем города
             file_put_contents('cities.json', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
@@ -170,8 +170,9 @@ function Parse($cityId, $links)
                     try {
                         //Запрос на сервер с сылкой на определённую вкладку
                         //$response = $client->request('GET', BASE_URI.$element['link'], ['action'=>'setRegion', 'id' => $cityId, 'on_stats' => function (TransferStats $stats) {echo $stats->getEffectiveUri();}]);
-                        $cookie = CookieJar::fromArray(['REGION_ID' => $cityId, 'B_TAX_REGION_ID' => $cityId], BASE_URI);
-                        $response = $client->request('GET', BASE_URI . $element['link'], ['cookies' => $cookie]);
+                        //$cookie = CookieJar::fromArray(['REGION_ID' => $cityId, 'B_TAX_REGION_ID' => $cityId], BASE_URI);
+                        //$response = $client->request('GET', BASE_URI . $element['link'], ['cookies' => $cookie]);
+                        $response = $client->request('GET', BASE_URI.$element['link'].'?action=setRegion&id='.$cityId, ['headers'=>array('Cache-Control'=>'no-cache')]);
                         if ($response->getStatusCode() == 200) {
                             $body = $response->getBody();
                             //Берём часть страницы со скриптом
@@ -201,7 +202,7 @@ function Parse($cityId, $links)
                         //Создаём массив, в котором будем хранить данные
                         $data = [];
                         //Отправляем запрос
-                        $response = $client->request('GET', BASE_URI . $element['link'], ['action' => 'setRegion', 'id' => $cityId]);
+                        $response = $client->request('GET', BASE_URI.$element['link'].'?action=setRegion&id='.$cityId, ['headers'=>array('Cache-Control'=>'no-cache')]);
                         if ($response->getStatusCode() == 200) {
                             //echo $element['link'].'. '.$response->getStatusCode().'<br/>';
                             $body = $response->getBody()->getContents();
@@ -237,7 +238,7 @@ function Parse($cityId, $links)
             }
         }
     } catch (Exception $e) {
-        file_put_contents(__DIR__ . 'logs/errors.log', $e . '\n', FILE_APPEND);
+        file_put_contents(__DIR__ . 'logs/errors.log', json_encode($e, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
     }
 }
 
