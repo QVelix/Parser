@@ -2,7 +2,7 @@
 require 'vendor/autoload.php';
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Cookie\CookieJar;
+//use GuzzleHttp\Cookie\CookieJar;
 use Symfony\Component\DomCrawler\Crawler;
 
 //Создаём константу такскома, потому что будем часто использовать
@@ -209,8 +209,9 @@ function Parse($cityId, $links)
                             $crawler = new Crawler((string)$body);
                             //Выбираем необходимую часть страницы и сохраняем необходимые данные в массив
                             $data = $crawler->filter('div.tariffsUc > .container > .tariffsUcTabContent > .row > .tariffsUcTabContent__tariff')->each(function (Crawler $node, $i) {
+                                $data['id'] = $i;
                                 $data['name'] = (string)StringCleaner($node->filter('.tariffUc__title')->text('Default text content', false));
-                                $data['description'] = (string)StringCleaner($node->filter('.tariffUc__desc')->text('Default text content', false));
+                                $data['description'] = (string)StringCleaner($node->filter('.tariffUc__more')->attr('href'));
                                 $data['price'] = (int)$node->filter('.tariffUc__switch > input')->attr('data-price');
                                 $data['fast_price'] = (int)$node->filter('.tariffUc__switch > input')->eq(1)->attr('data-price');
                                 $data['link'] = (string)$node->filter('.tariffUc__switch > input')->attr('data-link');
