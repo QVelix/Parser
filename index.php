@@ -111,6 +111,7 @@ if (date('N') < 6) {
         }
         chdir(__DIR__);
         file_put_contents(__DIR__ . '/logs/cronIteration.txt', ++$iteration);
+        sleep(95);
     }
 }
 
@@ -119,6 +120,8 @@ if (date('N') < 6) {
 Коды ошибки:
 1 - citiesParser выдал (список городов не парсится)
 2 - Parser выдал (города не парсятся)
+2.1 - Parser выдал (отчёность не парсится)
+2.2 - Parser выдал (эл.подписи не парсятяся)
 3 - ParseClasses выдал (не парсятся "папки" ака "категории услуг")
 
 */
@@ -187,12 +190,12 @@ function Parse($cityId, $links)
                             $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
                             file_put_contents(__DIR__ . '/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
                         } else {
-                            $e = array('iteration' => $GLOBALS["iteration"], 'errorCode' => 2, 'error' => 'Нет соединиения с сайтом', 'cityId' => $cityId);
+                            $e = array('iteration' => $GLOBALS["iteration"], 'errorCode' => "2.1", 'error' => 'Нет соединиения с сайтом', 'cityId' => $cityId);
                             file_put_contents(__DIR__ . '/logs/errors.log', json_encode($e, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
                             $GLOBALS["iteration"] -= 1;
                         }
                     } catch (Exception $e) {
-                        $error = array('iteration' => $GLOBALS["iteration"], 'errorCode' => 2, 'error' => $e, 'cityId' => $cityId);
+                        $error = array('iteration' => $GLOBALS["iteration"], 'errorCode' => "2.1", 'error' => (string)$e, 'cityId' => $cityId);
                         file_put_contents(__DIR__ . '/logs/errors.log', json_encode($error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
                         $GLOBALS["iteration"] -= 1;
                     }
@@ -211,7 +214,7 @@ function Parse($cityId, $links)
                             $data = $crawler->filter('div.tariffsUc > .container > .tariffsUcTabContent > .row > .tariffsUcTabContent__tariff')->each(function (Crawler $node, $i) {
                                 $data['id'] = $i;
                                 $data['name'] = (string)StringCleaner($node->filter('.tariffUc__title')->text('Default text content', false));
-                                $data['description'] = (string)StringCleaner($node->filter('.tariffUc__more')->attr('href'));
+                                $data['description'] = (string)StringCleaner($node->filter('.tariffUc__desc')->text('Default text content', false));
                                 $data['price'] = (int)$node->filter('.tariffUc__switch > input')->attr('data-price');
                                 $data['fast_price'] = (int)$node->filter('.tariffUc__switch > input')->eq(1)->attr('data-price');
                                 $data['link'] = (string)$node->filter('.tariffUc__switch > input')->attr('data-link');
@@ -224,12 +227,12 @@ function Parse($cityId, $links)
                             //Сохраняем
                             file_put_contents('electronic_signatures.json', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
                         } else {
-                            $e = array('iteration' => $GLOBALS["iteration"], 'errorCode' => 2, 'error' => 'Нет соединиения с сайтом', 'cityId' => $cityId);
+                            $e = array('iteration' => $GLOBALS["iteration"], 'errorCode' => "2.2", 'error' => 'Нет соединиения с сайтом', 'cityId' => $cityId);
                             file_put_contents(__DIR__ . '/logs/errors.log', json_encode($e, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
                             $GLOBALS["iteration"] -= 1;
                         }
                     } catch (Exception $e) {
-                        $error = array('iteration' => $GLOBALS["iteration"], 'errorCode' => 2, 'error' => $e, 'cityId' => $cityId);
+                        $error = array('iteration' => $GLOBALS["iteration"], 'errorCode' => "2.2", 'error' => (string)$e, 'cityId' => $cityId);
                         file_put_contents(__DIR__ . '/logs/errors.log', json_encode($error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
                         $GLOBALS["iteration"] -= 1;
                     }
@@ -239,7 +242,7 @@ function Parse($cityId, $links)
             }
         }
     } catch (Exception $e) {
-        file_put_contents(__DIR__ . 'logs/errors.log', json_encode($e, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
+        file_put_contents(__DIR__ . 'logs/errors.log', json_encode((string)$e, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
     }
 }
 
@@ -318,8 +321,8 @@ function translate($text)
 function SavePhoto($link, $uri)
 {
     $name = str_replace('img/', '', $link);
-    $path = str_replace('img/', '/images/', $link);
-    $link = $uri . '/products/' . $link;
+    $path = str_replace('img/', 'images/', $link);
+    $link = $uri . $link;
     //Проверка на наличие папки images
     if (!file_exists('./images')) mkdir('./images', 0777);
     chdir('./images');
