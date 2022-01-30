@@ -16,9 +16,14 @@ $iteration = (int)file_get_contents('cronIteration.txt');
 echo $iteration;
 if (file_exists(__DIR__ . '/logs/errors.log')) {
     $err = json_decode(file_get_contents(__DIR__ . '/logs/errors.log'), JSON_OBJECT_AS_ARRAY);
-    $err = end($err);
-    if ($err['iteration'] == $iteration && date('H', file(__DIR__ . '/logs/errors.log')) >= date('H')) {
-        sleep(3600);
+    if(is_array($err)){
+        $err = end($err);
+        if ($err['iteration'] == $iteration && date('H', file(__DIR__ . '/logs/errors.log')) >= date('H')) {
+            sleep(3600);
+        }
+    }
+    else{
+        echo 'Ошибка сбора ошибок';
     }
 }
 
@@ -111,13 +116,13 @@ if (date('N') < 6) {
         }
         chdir(__DIR__);
         file_put_contents(__DIR__ . '/logs/cronIteration.txt', ++$iteration);
-        sleep(95);
+        //sleep(95);
     }
 }
 
 /*
 
-Коды ошибки:
+Коды ошибок:
 1 - citiesParser выдал (список городов не парсится)
 2 - Parser выдал (города не парсятся)
 2.1 - Parser выдал (отчёность не парсится)
@@ -165,16 +170,12 @@ function citiesParser()
 function Parse($cityId, $links)
 {
     try {
-        //$action = '?action=setRegion&id=';
         $client = new Client(['cookies' => true]);
         foreach ($links as $k => $element) {
             switch ($k) {
                 case 0:
                     try {
                         //Запрос на сервер с сылкой на определённую вкладку
-                        //$response = $client->request('GET', BASE_URI.$element['link'], ['action'=>'setRegion', 'id' => $cityId, 'on_stats' => function (TransferStats $stats) {echo $stats->getEffectiveUri();}]);
-                        //$cookie = CookieJar::fromArray(['REGION_ID' => $cityId, 'B_TAX_REGION_ID' => $cityId], BASE_URI);
-                        //$response = $client->request('GET', BASE_URI . $element['link'], ['cookies' => $cookie]);
                         $response = $client->request('GET', BASE_URI.$element['link'].'?action=setRegion&id='.$cityId, ['headers'=>array('Cache-Control'=>'no-cache')]);
                         if ($response->getStatusCode() == 200) {
                             $body = $response->getBody();
@@ -185,7 +186,7 @@ function Parse($cityId, $links)
                             file_put_contents($element['file_name'], $content);
                             //Выделяем json показываемых кнопок (проделываем аналогичное, как ранее с продуктами, но в конце убираем запятую и табуляцию)
                             $buttons = substr(str_replace("'", '"', str_replace('filter: ', '', strstr(strstr($script, 'filter:'), 'showPeriods:', true))), 0, -14);
-                            file_put_contents('accouting_buttons.json', $buttons);
+                            file_put_contents('filters_ac.json', $buttons);
                             $citiesScript = StringCleaner(trim(str_replace('currentRegion:', '', (strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'), '});', true))), "\t\n\r\0\x0B"));
                             $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
                             file_put_contents(__DIR__ . '/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
@@ -199,6 +200,7 @@ function Parse($cityId, $links)
                         file_put_contents(__DIR__ . '/logs/errors.log', json_encode($error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
                         $GLOBALS["iteration"] -= 1;
                     }
+                    sleep(30);
                     break;
                 case 1:
                     try {
@@ -207,7 +209,6 @@ function Parse($cityId, $links)
                         //Отправляем запрос
                         $response = $client->request('GET', BASE_URI.$element['link'].'?action=setRegion&id='.$cityId, ['headers'=>array('Cache-Control'=>'no-cache')]);
                         if ($response->getStatusCode() == 200) {
-                            //echo $element['link'].'. '.$response->getStatusCode().'<br/>';
                             $body = $response->getBody()->getContents();
                             $crawler = new Crawler((string)$body);
                             //Выбираем необходимую часть страницы и сохраняем необходимые данные в массив
@@ -221,6 +222,7 @@ function Parse($cityId, $links)
                                 $data['link_fast'] = (string)$node->filter('.tariffUc__switch > input')->eq(1)->attr('data-link');
                                 return $data;
                             });
+                            $data = ParseESFilters($cityId, $data);
                             $citiesScript = StringCleaner(trim(str_replace('currentRegion:', '', (strstr(strstr(strstr(strstr((string)$body, 'var regionSelector = new RegionSelector({'), '</script>', true), 'currentRegion:'), '});', true))), "\t\n\r\0\x0B"));
                             $logs = array('cityId' => $cityId, 'site' => $element['link'], 'realCityId' => $citiesScript, 'connectionResult' => $response->getStatusCode());
                             file_put_contents(__DIR__ . '/logs/parser_logs.log', json_encode($logs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
@@ -236,6 +238,7 @@ function Parse($cityId, $links)
                         file_put_contents(__DIR__ . '/logs/errors.log', json_encode($error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
                         $GLOBALS["iteration"] -= 1;
                     }
+                    sleep(30);
                     break;
                 default:
                     break;
@@ -299,6 +302,40 @@ function ParseClasses()
         file_put_contents(__DIR__ . '/logs/errors.log', json_encode($error, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ',', FILE_APPEND);
         $GLOBALS["iteration"] -= 1;
     }
+}
+function ParseESFilters($cityId, $products){
+    $data = [];
+    $client = new Client();
+    $response = $client->request('GET', BASE_URI.'/centr/'.'?action=setRegion&id='.$cityId, ['headers'=>array('Cache-Control'=>'no-cache')]);
+    if($response->getStatusCode()==200){
+        $body = $response->getBody();
+        $crawler = new Crawler((string)$body);
+        $data = $crawler->filter('#tariffsUc > .tariffsUc >.tariffsUcNavTab > .container > ul > li')->each(function (Crawler $node, $i){
+            $data['name']=trim((string)$node->filter('a')->text('Default text content', false));
+            $data['id']=str_replace('#','', (string)$node->filter('a')->attr('href'));
+            return $data;
+        });
+        foreach($data as $k => $value){
+            $data[$k]['products'] = $crawler->filter('#tariffsUc > .tariffsUc > .container > .tariffsUcTabContent > #' . $value['id'] . '> div > .row > .tariffsUcTabContent__tariff')
+            ->each(function(Crawler $node, $i){
+                $value['products']['name']=trim($node->filter('.tariffUc>.tariffUc__top>.tariffUc__title')
+                ->text('Default text content', false));
+                return array('name'=>$value['products']['name']);
+            });
+        }
+        foreach($products as $k=>$v){
+            foreach($data as $keyData=>$valueData){
+                foreach($valueData['products'] as $keyProducts => $vProducts){
+                    if($v['name']==$vProducts['name']){
+                        $products[$k]['filter']=$valueData['name'];
+                    }
+                }
+            }
+        }
+        file_put_contents('filters_es.json', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        return $products;
+    }
+    return $products;
 }
 
 function translate($text)
